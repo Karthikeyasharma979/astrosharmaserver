@@ -1,0 +1,3 @@
+2026-01-20T12:28:04.360Z - reCAPTCHA: Verifying token. Secret Key Start: 6LcK...
+2026-01-20T12:28:04.662Z - reCAPTCHA Google Response: {"success":false,"error-codes":["invalid-input-response"]}
+2026-01-20T12:28:04.663Z - reCAPTCHA Verification Failed.
