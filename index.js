@@ -33,6 +33,7 @@ const normalizeUrl = (url) => url ? url.replace(/\/$/, '') : '';
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
+    'https://astrosharma.vercel.app',
     normalizeUrl(process.env.FRONTEND_URL)
 ].filter(Boolean);
 
