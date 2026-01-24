@@ -27,32 +27,43 @@ app.use(compression());
 app.use(helmet());
 
 // CORS Configuration
+// CORS Configuration
+const normalizeUrl = (url) => url ? url.replace(/\/$/, '') : '';
+
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
-    process.env.FRONTEND_URL // Add this to your .env file in production
+    normalizeUrl(process.env.FRONTEND_URL)
 ].filter(Boolean);
 
 app.use(cors({
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests) - remove this if you want to block non-browser requests
+        // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.indexOf(origin) === -1 && !process.env.FRONTEND_URL) {
-            // If FRONTEND_URL is not set, allow all (dev mode fallback) or restrict as needed
-            // For now, defaulting to allow to prevent breaking dev if variable missing
+        const normalizedOrigin = normalizeUrl(origin);
+
+        // Check if the normalized origin is in the allowed list
+        const isAllowed = allowedOrigins.some(allowed => allowed === normalizedOrigin);
+
+        if (isAllowed) {
             return callback(null, true);
         }
 
-        if (allowedOrigins.indexOf(origin) !== -1) {
+        // Fallback: If FRONTEND_URL is NOT set in env, allow all (Development mode)
+        if (!process.env.FRONTEND_URL) {
             return callback(null, true);
-        } else {
-            var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-            return callback(new Error(msg), false);
         }
+
+        console.log('CORS BLOCKED:', origin);
+        console.log('Allowed:', allowedOrigins);
+
+        var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+        return callback(new Error(msg), false);
     },
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
 }));
 
 app.use(express.json());
