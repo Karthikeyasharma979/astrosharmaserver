@@ -361,6 +361,7 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
                             ${isAdmin ? `<tr><th>Email</th><td>${email}</td></tr>` : ''}
                             ${dob ? `<tr><th>DOB</th><td>${dob}</td></tr>` : ''}
                             ${birthTime ? `<tr><th>Time</th><td>${formatTime(birthTime)}</td></tr>` : ''}
+                            ${birthPlace ? `<tr><th>Place</th><td>${birthPlace}</td></tr>` : ''}
                             ${pincode ? `<tr><th>Pincode</th><td>${pincode}</td></tr>` : ''}
                             ${startDate ? `<tr><th>Start Date</th><td>${startDate}</td></tr>` : ''}
                             ${endDate ? `<tr><th>End Date</th><td>${endDate}</td></tr>` : ''}
@@ -610,12 +611,6 @@ app.get('/api/payment-config', (req, res) => {
     res.json(paymentConfig);
 });
 
-// Export the app for Vercel (Serverless)
-module.exports = app;
-
-// Only listen if running locally (not required by Vercel)
-if (require.main === module) {
-    app.listen(port, () => {
-        console.log(`Server running on port ${port}`);
-    });
-}
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+});
