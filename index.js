@@ -112,7 +112,8 @@ const createTransporter = () => {
 };
 
 // Read Logo File Path
-const logoPath = path.join(__dirname, '../src/assets/logo_icon.jpg');
+// Read Logo File Path (Now local to server folder for production)
+const logoPath = path.join(__dirname, 'logo_icon.jpg');
 
 // ... existing middleware ...
 
