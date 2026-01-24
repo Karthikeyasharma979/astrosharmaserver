@@ -610,6 +610,12 @@ app.get('/api/payment-config', (req, res) => {
     res.json(paymentConfig);
 });
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
+// Export the app for Vercel (Serverless)
+module.exports = app;
+
+// Only listen if running locally (not required by Vercel)
+if (require.main === module) {
+    app.listen(port, () => {
+        console.log(`Server running on port ${port}`);
+    });
+}
