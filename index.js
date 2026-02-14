@@ -7,7 +7,9 @@ const fs = require('fs');
 const Joi = require('joi');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const compression = require('compression'); // Added
+const compression = require('compression');
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
 
 // Ensure we load the .env file from the server directory
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -111,6 +113,11 @@ const createTransporter = () => {
     });
 };
 
+const razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET
+});
+
 // Read Logo File Path
 // Read Logo File Path (Now local to server folder for production)
 const logoPath = path.join(__dirname, 'logo_icon.jpg');
@@ -123,11 +130,50 @@ const axios = require('axios');
 // Helper: Verify reCAPTCHA (Removed)
 // const verifyRecaptcha = async (token) => { ... }
 
+// API Endpoint to Create Razorpay Order
+app.post('/api/create-order', async (req, res) => {
+    try {
+        const { amount, currency = 'INR' } = req.body;
+
+        if (!amount) {
+            return res.status(400).json({ success: false, message: 'Amount is required' });
+        }
+
+        // Amount is expected in paise, but if passed in rupees, handle accordingly or expect frontend to send in paise/rupees.
+        // Usually Razorpay expects paise. Let's assume frontend sends Rupee amount, so we multiply by 100.
+        // OR better: Frontend sends price string "₹301", we strip non-numeric.
+
+        // Let's standardise: Backend expects amount in RUPEES (number/string), and converts to paise.
+        const amountInPaise = Math.round(Number(amount) * 100);
+
+        const options = {
+            amount: amountInPaise,
+            currency,
+            receipt: `receipt_${Date.now()}`
+        };
+
+        const order = await razorpay.orders.create(options);
+        res.json({ success: true, order });
+    } catch (error) {
+        console.error('Error creating Razorpay order:', error);
+        // Extract meaningful error message
+        const errorMessage = error.error && error.error.description
+            ? error.error.description
+            : (error.message || 'Error creating order');
+
+        res.status(500).json({ success: false, message: errorMessage });
+    }
+});
+
 // API Endpoint to handle booking
 const bookingSchema = Joi.object({
     // Common Fields
     // captchaToken: Joi.string().required(), // Removed
-    fullName: Joi.string().min(2).max(100).allow('', null), // Optional for marriage match
+    razorpay_payment_id: Joi.string().required(),
+    razorpay_order_id: Joi.string().required(),
+    razorpay_signature: Joi.string().required(),
+
+    fullName: Joi.string().min(2).max(100).allow('', null),
     dob: Joi.string().allow('', null),
     birthTime: Joi.string().allow('', null),
     birthPlace: Joi.string().allow('', null),
@@ -137,7 +183,8 @@ const bookingSchema = Joi.object({
     email: Joi.string().email().required(),
     consultationType: Joi.string().required(),
     price: Joi.string().allow('', null),
-    utrNumber: Joi.string().required(),
+    utrNumber: Joi.string().allow('', null), // Made optional as we use Razorpay now
+
 
     // Marriage Matching Specific
     girlName: Joi.string().allow('', null),
@@ -197,7 +244,8 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
 
         const {
             fullName, dob, birthTime, birthPlace, pincode,
-            question, phone, email, consultationType, price, utrNumber,
+            question, phone, email, consultationType, price, utrNumber: providedUtr,
+            razorpay_payment_id, razorpay_order_id, razorpay_signature,
             // Match specific fields
             girlName, girlDob, girlTime, girlPlace, girlPincode,
             boyName, boyDob, boyTime, boyPlace, boyPincode,
@@ -225,6 +273,18 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
             screenshotName = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
         }
 
+        // Verify Razorpay Signature
+        const generated_signature = crypto
+            .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+            .update(razorpay_order_id + "|" + razorpay_payment_id)
+            .digest('hex');
+
+        if (generated_signature !== razorpay_signature) {
+            return res.status(400).json({ success: false, message: 'Payment Verification Failed' });
+        }
+
+        const utrNumber = razorpay_payment_id; // Using Payment ID as Reference/UTR
+
         const transporter = createTransporter();
         const adminEmail = process.env.ADMIN_EMAIL; // Admin email to receive notifications
 
@@ -235,18 +295,18 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
 <head>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }
-        .wrapper { padding: 40px 20px; background-color: #f4f4f4; min-height: 100vh; }
+        .wrapper { padding: 20px 10px; background-color: #f4f4f4; min-height: 100vh; }
         .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; }
-        .header { padding: 40px 0 20px; text-align: center; }
-        .logo-img { width: 80px; height: 80px; object-fit: cover; border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        .content { padding: 0 40px 40px; text-align: center; }
-        .title { color: #6441A5; font-size: 26px; margin-bottom: 20px; font-weight: 700; }
+        .header { padding: 30px 0 20px; text-align: center; }
+        .logo-img { width: 70px; height: 70px; object-fit: cover; border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .content { padding: 0 20px 30px; text-align: center; }
+        .title { color: #6441A5; font-size: 24px; margin-bottom: 20px; font-weight: 700; }
         .message { color: #4a5568; line-height: 1.6; font-size: 16px; margin-bottom: 30px; text-align: left; }
         
-        .details-box { background-color: #faf5ff; border: 1px solid #e9d8fd; border-radius: 12px; padding: 20px; margin: 30px 0; }
-        .details-table { width: 100%; border-collapse: collapse; text-align: left; }
-        .details-table th { color: #6b46c1; font-size: 12px; font-weight: 700; text-transform: uppercase; padding: 8px 0; width: 40%; vertical-align: top; }
-        .details-table td { color: #2d3748; font-size: 15px; font-weight: 500; padding: 8px 0; vertical-align: top; }
+        .details-box { background-color: #faf5ff; border: 1px solid #e9d8fd; border-radius: 12px; padding: 15px; margin: 20px 0; }
+        .details-table { width: 100%; border-collapse: collapse; text-align: left; table-layout: fixed; }
+        .details-table th { color: #6b46c1; font-size: 12px; font-weight: 700; text-transform: uppercase; padding: 8px 0; width: 30%; vertical-align: top; white-space: normal; }
+        .details-table td { color: #2d3748; font-size: 14px; font-weight: 500; padding: 8px 0 8px 10px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
         
         .footer { background-color: #fbfbfb; padding: 20px; text-align: center; font-size: 12px; color: #a0aec0; border-top: 1px solid #edf2f7; }
         
@@ -406,8 +466,21 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
         };
 
         // Send Emails
-        await transporter.sendMail(adminMailOptions);
-        await transporter.sendMail(userMailOptions);
+        console.log(`Attempting to send email to Admin: ${adminEmail} and User: ${email}`);
+
+        try {
+            const adminInfo = await transporter.sendMail(adminMailOptions);
+            console.log(`Admin email sent successfully to ${adminEmail}. MsgID: ${adminInfo.messageId}`);
+        } catch (emailError) {
+            console.error(`Failed to send admin email: ${emailError.message}`, emailError);
+        }
+
+        try {
+            const userInfo = await transporter.sendMail(userMailOptions);
+            console.log(`User email sent successfully to ${email}. MsgID: ${userInfo.messageId}`);
+        } catch (emailError) {
+            console.error(`Failed to send user email: ${emailError.message}`, emailError);
+        }
 
         res.status(200).json({ success: true, message: 'Booking processed successfully' });
 
@@ -495,18 +568,18 @@ app.post('/api/contact', apiLimiter, upload.single('image'), async (req, res) =>
         <head>
             <style>
                 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }
-                .wrapper { padding: 40px 20px; background-color: #f4f4f4; min-height: 100vh; }
+                .wrapper { padding: 20px 10px; background-color: #f4f4f4; min-height: 100vh; }
                 .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; }
-                .header { padding: 40px 0 20px; text-align: center; }
-                .logo-img { width: 80px; height: 80px; object-fit: cover; border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-                .content { padding: 0 40px 40px; text-align: center; }
-                .title { color: #6441A5; font-size: 26px; margin-bottom: 20px; font-weight: 700; }
+                .header { padding: 30px 0 20px; text-align: center; }
+                .logo-img { width: 70px; height: 70px; object-fit: cover; border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+                .content { padding: 0 20px 30px; text-align: center; }
+                .title { color: #6441A5; font-size: 24px; margin-bottom: 20px; font-weight: 700; }
                 .message { color: #4a5568; line-height: 1.6; font-size: 16px; margin-bottom: 30px; text-align: left; }
                 
-                .details-box { background-color: #faf5ff; border: 1px solid #e9d8fd; border-radius: 12px; padding: 20px; margin: 30px 0; }
-                .details-table { width: 100%; border-collapse: collapse; text-align: left; }
-                .details-table th { color: #6b46c1; font-size: 12px; font-weight: 700; text-transform: uppercase; padding: 8px 0; width: 30%; vertical-align: top; }
-                .details-table td { color: #2d3748; font-size: 15px; font-weight: 500; padding: 8px 0; vertical-align: top; }
+                .details-box { background-color: #faf5ff; border: 1px solid #e9d8fd; border-radius: 12px; padding: 15px; margin: 20px 0; }
+                .details-table { width: 100%; border-collapse: collapse; text-align: left; table-layout: fixed; }
+                .details-table th { color: #6b46c1; font-size: 12px; font-weight: 700; text-transform: uppercase; padding: 8px 0; width: 30%; vertical-align: top; white-space: normal; }
+                .details-table td { color: #2d3748; font-size: 14px; font-weight: 500; padding: 8px 0 8px 10px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
                 
                 .footer { background-color: #fbfbfb; padding: 20px; text-align: center; font-size: 12px; color: #a0aec0; border-top: 1px solid #edf2f7; }
             </style>
