@@ -1,6 +1,12 @@
 node_modules
 .env
 .DS_Store
+# Test scripts
+test_*.js
+test-email.js
+
+# Debug logs and output
+debug_*.txt
 *.log
 npm-debug.log*
 yarn-debug.log*
