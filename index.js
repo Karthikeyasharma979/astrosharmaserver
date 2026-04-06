@@ -86,7 +86,7 @@ app.use(globalLimiter);
 // Strict Rate Limiter for sensitive endpoints (Booking, Contact)
 const apiLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
-    max: 10, // Limit each IP to 10 requests per hour
+    max: 1000, // Increased limit due to devtunnel proxy sharing IP
     message: { success: false, message: 'Too many requests, please try again later.' }
 });
 
@@ -324,9 +324,7 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
                 <div class="message">${message}</div>
                 ${detailsHtml}
             </div>
-            <div class="footer">
-                &copy; ${new Date().getFullYear()} Astro Services. All rights reserved.
-            </div>
+
         </div>
     </div>
 </body>
@@ -595,9 +593,7 @@ app.post('/api/contact', apiLimiter, upload.single('image'), async (req, res) =>
                         <div class="message">${messageContent}</div>
                         ${detailsHtml}
                     </div>
-                    <div class="footer">
-                        &copy; ${new Date().getFullYear()} Astro Services. All rights reserved.
-                    </div>
+
                 </div>
             </div>
         </body>
