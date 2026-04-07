@@ -11,8 +11,23 @@ const compression = require('compression');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
+const mongoose = require('mongoose');
+
 // Ensure we load the .env file from the server directory
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+// Connect to MongoDB
+if (process.env.MONGO_URI) {
+    mongoose.connect(process.env.MONGO_URI)
+        .then(() => console.log('MongoDB successfully connected'))
+        .catch(err => console.error('MongoDB connection error:', err));
+} else {
+    console.warn('MONGO_URI is missing in environment variables. Database features will be disabled.');
+}
+
+const Booking = require('./models/Booking');
+const Contact = require('./models/Contact');
+
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -285,6 +300,24 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
 
         const utrNumber = razorpay_payment_id; // Using Payment ID as Reference/UTR
 
+        // Save to Database
+        try {
+            const newBooking = new Booking({
+                fullName, dob, birthTime, birthPlace, pincode, question, phone, email, consultationType, price,
+                razorpay_payment_id, razorpay_order_id, razorpay_signature,
+                girlName, girlDob, girlTime, girlPlace, girlPincode,
+                boyName, boyDob, boyTime, boyPlace, boyPincode,
+                girl2Name, girl2Dob, girl2Time, girl2Place, girl2Pincode,
+                boy2Name, boy2Dob, boy2Time, boy2Place, boy2Pincode,
+                startDate, endDate, muhurthamLocation
+            });
+            await newBooking.save();
+            console.log('Booking successfully saved to MongoDB:', newBooking._id);
+        } catch (dbError) {
+            console.error('Failed to save booking to MongoDB:', dbError);
+            // We will continue sending email even if DB fails for resilience
+        }
+
         const transporter = createTransporter();
         const adminEmail = process.env.ADMIN_EMAIL; // Admin email to receive notifications
 
@@ -551,6 +584,21 @@ app.post('/api/contact', apiLimiter, upload.single('image'), async (req, res) =>
             }
             imageBuffer = req.file.buffer;
             imageName = req.file.originalname;
+        }
+
+        // Save Contact Message to Database
+        try {
+            const newContact = new Contact({
+                firstName,
+                lastName,
+                email,
+                message,
+                hasAttachment: !!imageBuffer
+            });
+            await newContact.save();
+            console.log('Contact message saved to MongoDB:', newContact._id);
+        } catch (dbError) {
+            console.error('Failed to save contact message to MongoDB:', dbError);
         }
 
         console.log('Backend: Processing Contact Form for:', fullName);
