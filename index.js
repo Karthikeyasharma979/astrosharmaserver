@@ -320,7 +320,7 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
             console.log('✅ SUCCESS: Booking successfully stored in MongoDB. ID:', newBooking._id);
         } catch (dbError) {
             console.error('❌ ERROR: Failed to save booking to MongoDB:', dbError);
-            dbStatus = 'but failed to save to database (will be handled manually)';
+            dbStatus = `but failed to save to database (Error: ${dbError.message}). Your booking will be handled manually via email.`;
         }
 
         // Email and response logic continues below... (removed early response)
@@ -612,7 +612,7 @@ app.post('/api/contact', apiLimiter, upload.single('image'), async (req, res) =>
             console.log('✅ SUCCESS: Contact message stored in MongoDB. ID:', newContact._id);
         } catch (dbError) {
             console.error('❌ ERROR: Failed to save contact message to MongoDB:', dbError);
-            dbStatus = 'but failed to save to database';
+            dbStatus = `but failed to save to database (Error: ${dbError.message})`;
         }
 
         console.log('Backend: Processing Contact Form for:', fullName);
