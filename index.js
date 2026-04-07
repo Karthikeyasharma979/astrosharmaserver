@@ -13,8 +13,10 @@ const crypto = require('crypto');
 
 const mongoose = require('mongoose');
 
-// Ensure we load the .env file from the server directory
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+// Load environment variables from .env in development
+if (process.env.NODE_ENV !== 'production') {
+    require('dotenv').config({ path: path.join(__dirname, '.env') });
+}
 
 // Connect to MongoDB
 if (process.env.MONGO_URI) {
@@ -728,6 +730,12 @@ app.get('/api/payment-config', (req, res) => {
     res.json(paymentConfig);
 });
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
+// Initialize server only in local development
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(port, () => {
+        console.log(`Server running on port ${port}`);
+    });
+}
+
+// Export for Vercel Serverless Functions
+module.exports = app;
