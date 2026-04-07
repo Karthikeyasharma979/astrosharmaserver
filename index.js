@@ -176,13 +176,30 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
             }
         ];
 
-        // RESPOND IMMEDIATELY TO DECREASE LOADING TIME
-        res.status(200).json({ success: true, message: `Booking processed ${dbStatus}`, bookingId: newBooking?._id });
+        // Wait for email results so frontend can show accurate status.
+        const emailResults = await Promise.allSettled(mailOptions.map(opt => transporter.sendMail(opt)));
+        const emailFailures = [];
 
-        // Background tasks
-        Promise.allSettled(mailOptions.map(opt => transporter.sendMail(opt)))
-            .then(results => console.log('Emails processed'))
-            .catch(e => console.error('Background email error:', e));
+        emailResults.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+                console.log(`✅ Email ${index + 1} sent successfully:`, result.value.messageId);
+            } else {
+                const reason = result.reason?.message || 'Unknown email error';
+                emailFailures.push(`Email ${index + 1}: ${reason}`);
+                console.error(`❌ Email ${index + 1} failed:`, result.reason);
+            }
+        });
+
+        const emailSent = emailFailures.length === 0;
+        const emailError = emailSent ? null : emailFailures.join(' | ');
+
+        res.status(200).json({
+            success: true,
+            message: `Booking processed ${dbStatus}`,
+            bookingId: newBooking?._id,
+            emailSent,
+            emailError
+        });
 
     } catch (error) {
         console.error('General Error:', error);
@@ -235,7 +252,24 @@ app.post('/api/contact', apiLimiter, upload.single('image'), async (req, res) =>
         res.status(200).json({ success: true, message: `Message sent successfully ${dbStatus}` });
 
         // Background tasks
-        Promise.allSettled([transporter.sendMail(adminMail), transporter.sendMail(userMail)]);
+        (async () => {
+            try {
+                const results = await Promise.allSettled([
+                    transporter.sendMail(adminMail),
+                    transporter.sendMail(userMail)
+                ]);
+                results.forEach((result, index) => {
+                    const label = index === 0 ? 'Admin' : 'User';
+                    if (result.status === 'fulfilled') {
+                        console.log(`✅ ${label} Contact Email sent successfully:`, result.value.messageId);
+                    } else {
+                        console.error(`❌ ${label} Contact Email failed:`, result.reason);
+                    }
+                });
+            } catch (e) {
+                console.error('❌ Background contact email error:', e);
+            }
+        })();
 
     } catch (error) {
         res.status(500).json({ success: false, message: 'Internal Server Error' });
