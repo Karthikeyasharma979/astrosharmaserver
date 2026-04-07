@@ -303,8 +303,11 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
         const utrNumber = razorpay_payment_id; // Using Payment ID as Reference/UTR
 
         // Save to Database
+        // Save to Database
+        let dbStatus = 'and saved to database';
+        let newBooking = null;
         try {
-            const newBooking = new Booking({
+            newBooking = new Booking({
                 fullName, dob, birthTime, birthPlace, pincode, question, phone, email, consultationType, price,
                 razorpay_payment_id, razorpay_order_id, razorpay_signature,
                 girlName, girlDob, girlTime, girlPlace, girlPincode,
@@ -314,11 +317,13 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
                 startDate, endDate, muhurthamLocation
             });
             await newBooking.save();
-            console.log('Booking successfully saved to MongoDB:', newBooking._id);
+            console.log('✅ SUCCESS: Booking successfully stored in MongoDB. ID:', newBooking._id);
         } catch (dbError) {
-            console.error('Failed to save booking to MongoDB:', dbError);
-            // We will continue sending email even if DB fails for resilience
+            console.error('❌ ERROR: Failed to save booking to MongoDB:', dbError);
+            dbStatus = 'but failed to save to database (will be handled manually)';
         }
+
+        // Email and response logic continues below... (removed early response)
 
         const transporter = createTransporter();
         const adminEmail = process.env.ADMIN_EMAIL; // Admin email to receive notifications
@@ -515,7 +520,11 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
             console.error(`Failed to send user email: ${emailError.message}`, emailError);
         }
 
-        res.status(200).json({ success: true, message: 'Booking processed successfully' });
+        res.status(200).json({ 
+            success: true, 
+            message: `Booking processed ${dbStatus}`,
+            bookingId: newBooking ? newBooking._id : null
+        });
 
     } catch (error) {
         console.error('Error processing booking:', error);
@@ -589,8 +598,10 @@ app.post('/api/contact', apiLimiter, upload.single('image'), async (req, res) =>
         }
 
         // Save Contact Message to Database
+        let dbStatus = 'and saved to database';
+        let newContact = null;
         try {
-            const newContact = new Contact({
+            newContact = new Contact({
                 firstName,
                 lastName,
                 email,
@@ -598,9 +609,10 @@ app.post('/api/contact', apiLimiter, upload.single('image'), async (req, res) =>
                 hasAttachment: !!imageBuffer
             });
             await newContact.save();
-            console.log('Contact message saved to MongoDB:', newContact._id);
+            console.log('✅ SUCCESS: Contact message stored in MongoDB. ID:', newContact._id);
         } catch (dbError) {
-            console.error('Failed to save contact message to MongoDB:', dbError);
+            console.error('❌ ERROR: Failed to save contact message to MongoDB:', dbError);
+            dbStatus = 'but failed to save to database';
         }
 
         console.log('Backend: Processing Contact Form for:', fullName);
@@ -687,7 +699,6 @@ app.post('/api/contact', apiLimiter, upload.single('image'), async (req, res) =>
             attachments: adminAttachments
         };
 
-        // 2. Email to User (Auto-reply)
         const userDetailsHtml = `
              <div class="details-box">
                 <p style="font-style: italic; color: #666;">"${message}"</p>
@@ -710,7 +721,7 @@ app.post('/api/contact', apiLimiter, upload.single('image'), async (req, res) =>
         await transporter.sendMail(adminMailOptions);
         await transporter.sendMail(userMailOptions);
 
-        res.status(200).json({ success: true, message: 'Message sent successfully' });
+        res.status(200).json({ success: true, message: `Message sent successfully ${dbStatus}` });
 
     } catch (error) {
         console.error('Error sending contact message:', error);
