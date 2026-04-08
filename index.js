@@ -179,19 +179,42 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
         // Wait for email results so frontend can show accurate status.
         const emailResults = await Promise.allSettled(mailOptions.map(opt => transporter.sendMail(opt)));
         const emailFailures = [];
+        const bookingMeta = {
+            bookingId: newBooking?._id?.toString() || null,
+            paymentId: payload.razorpay_payment_id,
+            orderId: payload.razorpay_order_id,
+            customerEmail: payload.email,
+            consultationType: payload.consultationType
+        };
 
         emailResults.forEach((result, index) => {
             if (result.status === 'fulfilled') {
-                console.log(`✅ Email ${index + 1} sent successfully:`, result.value.messageId);
+                console.log(`✅ Email ${index + 1} sent successfully:`, {
+                    ...bookingMeta,
+                    messageId: result.value.messageId
+                });
             } else {
                 const reason = result.reason?.message || 'Unknown email error';
                 emailFailures.push(`Email ${index + 1}: ${reason}`);
-                console.error(`❌ Email ${index + 1} failed:`, result.reason);
+                console.error(`❌ Email ${index + 1} failed:`, {
+                    ...bookingMeta,
+                    reason,
+                    rawError: result.reason
+                });
             }
         });
 
         const emailSent = emailFailures.length === 0;
         const emailError = emailSent ? null : emailFailures.join(' | ');
+
+        if (emailSent) {
+            console.log('✅ BOOKING_EMAIL_STATUS: ALL_SENT', bookingMeta);
+        } else {
+            console.error('❌ BOOKING_EMAIL_STATUS: PARTIAL_OR_FAILED', {
+                ...bookingMeta,
+                emailError
+            });
+        }
 
         res.status(200).json({
             success: true,
