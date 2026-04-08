@@ -157,21 +157,79 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
         const transporter = createTransporter();
         const adminEmail = process.env.ADMIN_EMAIL;
         
-        const createEmailTemplate = (title, msg, details) => `<html><body style="font-family:sans-serif;"><h2>${title}</h2><p>${msg}</p>${details}</body></html>`;
-        
+        const escapeHtml = (value = '') => String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+        const row = (label, value) => {
+            if (!value) return '';
+            return `
+                <tr>
+                    <td style="padding:10px 12px; border-bottom:1px solid #e5e7eb; color:#4b5563; width:40%;">${escapeHtml(label)}</td>
+                    <td style="padding:10px 12px; border-bottom:1px solid #e5e7eb; color:#111827; font-weight:600;">${escapeHtml(value)}</td>
+                </tr>
+            `;
+        };
+
+        const adminBookingHtml = `
+            <html>
+                <body style="margin:0; padding:24px; background:#f3f4f6; font-family:Arial, sans-serif;">
+                    <div style="max-width:700px; margin:0 auto; background:#ffffff; border-radius:14px; padding:24px; border:1px solid #e5e7eb;">
+                        <div style="text-align:center; margin-bottom:20px;">
+                            <img src="cid:logo" alt="AstroSharma" style="width:70px; height:70px; border-radius:999px; object-fit:cover;" />
+                            <h2 style="margin:16px 0 6px; color:#4f46e5; font-size:30px;">New Booking Received</h2>
+                            <p style="margin:0; color:#6b7280;">A customer has completed payment and booking.</p>
+                        </div>
+                        <table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
+                            ${row('Consultation Type', payload.consultationType)}
+                            ${row('Customer Name', payload.fullName)}
+                            ${row('Phone', payload.phone)}
+                            ${row('Email', payload.email)}
+                            ${row('Date of Birth', payload.dob)}
+                            ${row('Birth Time', payload.birthTime)}
+                            ${row('Birth Place', payload.birthPlace)}
+                            ${row('Pincode', payload.pincode)}
+                            ${row('Question / Purpose', payload.question || payload.message)}
+                            ${row('Payment ID', payload.razorpay_payment_id)}
+                            ${row('Order ID', payload.razorpay_order_id)}
+                        </table>
+                    </div>
+                </body>
+            </html>
+        `;
+
+        const userBookingHtml = `
+            <html>
+                <body style="margin:0; padding:24px; background:#f3f4f6; font-family:Arial, sans-serif;">
+                    <div style="max-width:700px; margin:0 auto; background:#ffffff; border-radius:14px; padding:24px; border:1px solid #e5e7eb;">
+                        <div style="text-align:center; margin-bottom:20px;">
+                            <img src="cid:logo" alt="AstroSharma" style="width:88px; height:88px; border-radius:999px; object-fit:cover;" />
+                            <h2 style="margin:16px 0 6px; color:#5b3fa3; font-size:46px;">Booking Confirmation</h2>
+                        </div>
+                        <p style="font-size:18px; color:#4b5563; line-height:1.8; margin:0 0 10px;">Namaste ${escapeHtml(payload.fullName || 'Customer')},</p>
+                        <p style="font-size:18px; color:#4b5563; line-height:1.8; margin:0 0 10px;">Thank you for choosing us. We have received your request for ${escapeHtml(payload.consultationType || 'consultation')}.</p>
+                        <p style="font-size:18px; color:#4b5563; line-height:1.8; margin:0;">Our team is verifying your payment (UTR: ${escapeHtml(payload.razorpay_payment_id || 'N/A')}). We will contact you shortly.</p>
+                    </div>
+                </body>
+            </html>
+        `;
+
         const mailOptions = [
             {
                 from: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER,
                 to: adminEmail,
                 subject: `New Booking: ${payload.fullName || 'User'}`,
-                html: createEmailTemplate("New Booking", "A new booking has been received.", `<pre>${JSON.stringify(payload, null, 2)}</pre>`),
+                html: adminBookingHtml,
                 attachments: [{ filename: 'logo.jpg', path: logoPath, cid: 'logo' }]
             },
             {
                 from: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER,
                 to: payload.email,
                 subject: 'Booking Received - AstroSharma',
-                html: createEmailTemplate("Booking Confirmation", "We received your booking for " + payload.consultationType, "<p>Thank you!</p>"),
+                html: userBookingHtml,
                 attachments: [{ filename: 'logo.jpg', path: logoPath, cid: 'logo' }]
             }
         ];
