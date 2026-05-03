@@ -185,6 +185,7 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
                         </div>
                         <table style="width:100%; border-collapse:collapse; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
                             ${row('Consultation Type', payload.consultationType)}
+                            ${row('Price', payload.price)}
                             ${row('Customer Name', payload.fullName)}
                             ${row('Phone', payload.phone)}
                             ${row('Email', payload.email)}
@@ -193,6 +194,30 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
                             ${row('Birth Place', payload.birthPlace)}
                             ${row('Pincode', payload.pincode)}
                             ${row('Question / Purpose', payload.question || payload.message)}
+                            ${row('Bride Name', payload.girlName)}
+                            ${row('Bride DoB', payload.girlDob)}
+                            ${row('Bride Birth Time', payload.girlTime)}
+                            ${row('Bride Birth Place', payload.girlPlace)}
+                            ${row('Bride Pincode', payload.girlPincode)}
+                            ${row('Groom Name', payload.boyName)}
+                            ${row('Groom DoB', payload.boyDob)}
+                            ${row('Groom Birth Time', payload.boyTime)}
+                            ${row('Groom Birth Place', payload.boyPlace)}
+                            ${row('Groom Pincode', payload.boyPincode)}
+                            ${row('Extra Person Added', payload.extraPersonType !== 'none' && payload.extraPersonType ? payload.extraPersonType.toUpperCase() : '')}
+                            ${row('Bride 2 Name', payload.girl2Name)}
+                            ${row('Bride 2 DoB', payload.girl2Dob)}
+                            ${row('Bride 2 Birth Time', payload.girl2Time)}
+                            ${row('Bride 2 Birth Place', payload.girl2Place)}
+                            ${row('Bride 2 Pincode', payload.girl2Pincode)}
+                            ${row('Groom 2 Name', payload.boy2Name)}
+                            ${row('Groom 2 DoB', payload.boy2Dob)}
+                            ${row('Groom 2 Birth Time', payload.boy2Time)}
+                            ${row('Groom 2 Birth Place', payload.boy2Place)}
+                            ${row('Groom 2 Pincode', payload.boy2Pincode)}
+                            ${row('Start Date', payload.startDate)}
+                            ${row('End Date', payload.endDate)}
+                            ${row('Muhurtham Location', payload.muhurthamLocation)}
                             ${row('Payment ID', payload.razorpay_payment_id)}
                             ${row('Order ID', payload.razorpay_order_id)}
                         </table>
@@ -217,13 +242,21 @@ app.post('/api/book-consultation', apiLimiter, upload.single('screenshot'), asyn
             </html>
         `;
 
+        const adminAttachments = [{ filename: 'logo.jpg', path: logoPath, cid: 'logo' }];
+        if (req.file) {
+            adminAttachments.push({
+                filename: req.file.originalname,
+                content: req.file.buffer
+            });
+        }
+
         const mailOptions = [
             {
                 from: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER,
                 to: adminEmail,
                 subject: `New Booking: ${payload.fullName || 'User'}`,
                 html: adminBookingHtml,
-                attachments: [{ filename: 'logo.jpg', path: logoPath, cid: 'logo' }]
+                attachments: adminAttachments
             },
             {
                 from: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER,
@@ -313,12 +346,20 @@ app.post('/api/contact', apiLimiter, upload.single('image'), async (req, res) =>
         const transporter = createTransporter();
         const adminEmail = process.env.ADMIN_EMAIL;
         
+        const adminAttachments = [{ filename: 'logo.jpg', path: logoPath, cid: 'logo' }];
+        if (req.file) {
+            adminAttachments.push({
+                filename: req.file.originalname,
+                content: req.file.buffer
+            });
+        }
+
         const adminMail = {
             from: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER,
             to: adminEmail,
             subject: `New Contact: ${firstName}`,
-            html: `<h3>New Inquiry from ${firstName} ${lastName}</h3><p>${message}</p>`,
-            attachments: [{ filename: 'logo.jpg', path: logoPath, cid: 'logo' }]
+            html: `<h3>New Inquiry from ${firstName} ${lastName}</h3><p><strong>Email:</strong> ${email}</p><p><strong>Message:</strong><br/>${message}</p>`,
+            attachments: adminAttachments
         };
 
         const userMail = {

@@ -40,6 +40,7 @@ const bookingSchema = new mongoose.Schema({
     boyPincode: { type: String },
 
     // Marriage Matching - Bride 2 (Optional)
+    extraPersonType: { type: String, enum: ['none', 'bride', 'groom'], default: 'none' },
     girl2Name: { type: String },
     girl2Dob: { type: String },
     girl2Time: { type: String },
@@ -59,7 +60,8 @@ const bookingSchema = new mongoose.Schema({
     muhurthamLocation: { type: String },
 
 }, {
-    timestamps: true
+    timestamps: true,
+    strict: false
 });
 
 module.exports = mongoose.model('Booking', bookingSchema);
