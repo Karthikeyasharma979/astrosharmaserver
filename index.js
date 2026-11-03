@@ -122,7 +122,18 @@ const logoPath = path.join(__dirname, 'logo_icon.jpg');
 
 // A copy of the website's pricing code, so the displayed and charged prices follow the same rules.
 // See scripts/sync-shared.js: run it after changing the original, and deploy both together.
-const { quoteConsultation, quoteAdminCoupon, isBuiltInCouponCode, formatRupees } = require('./shared/utils/consultationPricing.js');
+// shared/ holds ES modules, which Vercel's runtime cannot require(), so they are loaded with import()
+// and every request waits until they are ready.
+let quoteConsultation, quoteAdminCoupon, isBuiltInCouponCode, formatRupees;
+const { sharedReady: kpSharedReady, calculateKPKundliSwiss, calculateVimshottariDasha } = require('./services/swissEphemerisService');
+const sharedReady = Promise.all([
+    import('./shared/utils/consultationPricing.js')
+        .then((m) => ({ quoteConsultation, quoteAdminCoupon, isBuiltInCouponCode, formatRupees } = m)),
+    kpSharedReady
+]);
+app.use((req, res, next) => {
+    sharedReady.then(() => next(), next);
+});
 
 const NO_LOYALTY = { isValuableCustomer: false, isVipEligible: false, bookingCount: 0 };
 
@@ -1133,7 +1144,6 @@ const locationRoutes = require('./routes/locationRoutes');
 app.use('/api/location', locationRoutes);
 
 // Authoritative KP Kundli Calculation Endpoint (Swiss Ephemeris 2.10.03)
-const { calculateKPKundliSwiss, calculateVimshottariDasha } = require('./services/swissEphemerisService');
 
 app.post('/api/kp-kundli', (req, res) => {
     try {
