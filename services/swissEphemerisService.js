@@ -18,22 +18,15 @@
 const sweph = require('sweph');
 const path = require('path');
 
-// Import KP domain interpretation helpers.
-// shared/ holds ES modules, which Vercel's runtime cannot require(), so they are loaded with import().
-// index.js holds every request until sharedReady resolves.
-let resolveKPLongitude, SIGN_LORDS, getKPPlanetHouse, normalizeDeg, calculateKPSignificators,
-    calculatePlanetaryAspects, calculateKPHora, formatDMS, resolveLocalToUTC, calculateVimshottariDasha;
-
-const sharedReady = Promise.all([
-    import('../shared/utils/kp/kpSubLord.js').then((m) => ({ resolveKPLongitude, SIGN_LORDS } = m)),
-    import('../shared/utils/kp/kpHouses.js').then((m) => ({ getKPPlanetHouse, normalizeDeg } = m)),
-    import('../shared/utils/kp/kpSignificators.js').then((m) => ({ calculateKPSignificators } = m)),
-    import('../shared/utils/kp/kpAspects.js').then((m) => ({ calculatePlanetaryAspects } = m)),
-    import('../shared/utils/kp/kpRulingPlanets.js').then((m) => ({ calculateKPHora } = m)),
-    import('../shared/utils/nakshatraUtils.js').then((m) => ({ formatDMS } = m)),
-    import('../shared/services/locationService.js').then((m) => ({ resolveLocalToUTC } = m)),
-    import('../shared/utils/kp/vimshottariDasha.js').then((m) => ({ calculateVimshottariDasha } = m)),
-]);
+// Import KP domain interpretation helpers
+const { resolveKPLongitude, SIGN_LORDS } = require('../shared/utils/kp/kpSubLord.js');
+const { getKPPlanetHouse, normalizeDeg } = require('../shared/utils/kp/kpHouses.js');
+const { calculateKPSignificators } = require('../shared/utils/kp/kpSignificators.js');
+const { calculatePlanetaryAspects } = require('../shared/utils/kp/kpAspects.js');
+const { calculateKPHora } = require('../shared/utils/kp/kpRulingPlanets.js');
+const { formatDMS } = require('../shared/utils/nakshatraUtils.js');
+const { resolveLocalToUTC } = require('../shared/services/locationService.js');
+const { calculateVimshottariDasha } = require('../shared/utils/kp/vimshottariDasha.js');
 
 const KP_AYANAMSHA_MODES = {
     KP_NEW: 'KP_NEW',
@@ -366,10 +359,8 @@ function calculateKPKundliSwiss({
 }
 
 module.exports = {
-    sharedReady,
     calculateKPKundliSwiss,
-    // Wrapped because the shared function is only assigned once sharedReady resolves
-    calculateVimshottariDasha: (...args) => calculateVimshottariDasha(...args),
+    calculateVimshottariDasha,
     getJulianDayUT,
     getKPAyanamsha,
     KP_AYANAMSHA_MODES
