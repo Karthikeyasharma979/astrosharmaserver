@@ -1,2 +1,2 @@
 // Astro Server Entry Point
-require('./index.js');
+module.exports = require('./index.js');
