@@ -1,0 +1,726 @@
+/**
+ * Hindu Festivals & Dynamic Discount Engine for AstroSharma
+ * Provides festival calendar detection, auspicious day offers, and first-time customer discounts.
+ */
+
+// Each festival code works only inside its `windows`: inclusive [start, end] dates in Indian time.
+// Festivals follow the lunar calendar, so the dates change every year and must be added by hand.
+// A code with no window for the current date is rejected, so add next year's dates before December.
+// The usual window opens 7 days before the main day and closes the day after it.
+export const HINDU_FESTIVALS = [
+    {
+        id: 'diwali',
+        name: 'Deepavali & Dhanteras Mahalakshmi Parv',
+        nameTe: 'దీపావళి & ధనత్రయోదశి లక్ష్మీ అనుగ్రహ పర్వం',
+        code: 'DIWALI30',
+        discountType: 'percentage',
+        discountValue: 30,
+        badge: '🪔 Deepavali Special',
+        description: 'May Goddess Mahalakshmi shower prosperity. Get 30% OFF on all Kundali & Life guidance.',
+        descriptionTe: 'శ్రీ మహాలక్ష్మి అనుగ్రహంతో 30% తగ్గింపుతో మీ సంపూర్ణ జాతక విశ్లేషణను పొందండి.',
+        windows: [['2026-11-01', '2026-11-10'], ['2027-10-22', '2027-10-31']],
+        minAmount: 100
+    },
+    {
+        id: 'navratri',
+        name: 'Devi Navratri & Dussehra Mahotsav',
+        nameTe: 'శ్రీ దేవీ శరన్నవరాత్రులు & విజయదశమి',
+        code: 'NAVRATRI25',
+        discountType: 'percentage',
+        discountValue: 25,
+        badge: '🔱 Navratri Shakti Blessing',
+        description: 'Seek Maa Durga\'s supreme protection. 25% OFF on horoscope matching & career remedies.',
+        descriptionTe: 'దుర్గాదేవి ఆశీస్సులతో జాతక విశ్లేషణ మరియు వివాహ పొంతనలపై 25% ప్రత్యేక రాయితీ.',
+        windows: [['2027-09-30', '2027-10-10']],
+        minAmount: 100
+    },
+    {
+        id: 'karwachauth',
+        name: 'Karwa Chauth Dampatya Soubhagya',
+        nameTe: 'కర్వాచౌత్ దాంపత్య సౌభాగ్య పర్వదినం',
+        code: 'SOUBHAGYA25',
+        discountType: 'percentage',
+        discountValue: 25,
+        badge: '🌕 Karwa Chauth Special',
+        description: 'Blessings for marital harmony and spouse longevity. 25% OFF on Marriage & Kundali Matching.',
+        descriptionTe: 'వివాహ బంధం మరియు దాంపత్య సుఖం కొరకు 25% ప్రత్యేక రాయితీ.',
+        windows: [['2027-10-11', '2027-10-19']],
+        minAmount: 100
+    },
+    {
+        id: 'kartik_purnima',
+        name: 'Kartika Masam & Dev Deepavali',
+        nameTe: 'కార్తీక మాస దీపోత్సవం & దేవ దీపావళి',
+        code: 'KARTIKA25',
+        discountType: 'percentage',
+        discountValue: 25,
+        badge: '✨ Kartika Masam Blessing',
+        description: 'Auspicious holy Shiva-Vishnu month. Get 25% OFF on horoscope guidance and remedies.',
+        descriptionTe: 'పరమ పవిత్ర కార్తీక మాస సందర్భంగా 25% విశేష రాయితీ.',
+        windows: [['2026-11-11', '2026-12-08'], ['2027-11-01', '2027-11-28']],
+        minAmount: 100
+    },
+    {
+        id: 'sankranti',
+        name: 'Makar Sankranti Surya Parv',
+        nameTe: 'మకర సంక్రాంతి సూర్య సంక్రమణ పుణ్యకాలం',
+        code: 'SURYA20',
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '☀️ Sankranti Special',
+        description: 'Auspicious Surya Uttarayana transit. Get 20% OFF on life predictions.',
+        descriptionTe: 'సూర్యుని ఉత్తరాయణ పుణ్యకాలంలో జాతక పరిశీలనపై 20% రాయితీ.',
+        windows: [['2027-01-08', '2027-01-16']],
+        minAmount: 100
+    },
+    {
+        id: 'vasant_panchami',
+        name: 'Vasant Panchami Saraswati Kripa',
+        nameTe: 'వసంత పంచమి సరస్వతీ అనుగ్రహం',
+        code: 'VIDYA20',
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '🪕 Saraswati Special',
+        description: 'Blessings for education, intellect, and competitive exams. 20% OFF.',
+        descriptionTe: 'విద్యాబుద్ధులు మరియు ఉన్నత ఉద్యోగ జాతకంపై 20% రాయితీ.',
+        windows: [['2027-02-04', '2027-02-12']],
+        minAmount: 100
+    },
+    {
+        id: 'shivratri',
+        name: 'Maha Shivratri Rudra Kripa',
+        nameTe: 'మహా శివరాత్రి రుద్ర కృపా పర్వదినం',
+        code: 'SHIVOHAM',
+        discountType: 'flat',
+        discountValue: 101,
+        badge: '🕉️ Maha Shivratri Blessing',
+        description: 'Remove planetary afflictions with Lord Shiva\'s grace. Flat ₹101 OFF on consultations.',
+        descriptionTe: 'పరమశివుని అనుగ్రహంతో గ్రహదోష నివారణకు ఫ్లాట్ ₹101 దక్షిణ రాయితీ.',
+        windows: [['2027-02-27', '2027-03-07']],
+        minAmount: 101
+    },
+    {
+        id: 'ugadi',
+        name: 'Ugadi & Vedic New Year Panchanga Shravanam',
+        nameTe: 'నూతన ఉగాది శుభకృత్ పర్వం',
+        code: 'UGADI25',
+        discountType: 'percentage',
+        discountValue: 25,
+        badge: '🥭 Ugadi New Year Special',
+        description: 'Start the Vedic New Year with planetary clarity. 25% OFF on Annual Horoscope.',
+        descriptionTe: 'నూతన సంవత్సర జాతక ఫలితాలు మరియు పంచాంగ శ్రవణం కొరకు 25% ప్రత్యేక రాయితీ.',
+        windows: [['2027-03-31', '2027-04-08']],
+        minAmount: 100
+    },
+    {
+        id: 'ramnavami',
+        name: 'Sri Rama Navami Dharma Blessing',
+        nameTe: 'శ్రీరామ నవమి ధర్మ సంకల్ప పర్వం',
+        code: 'SRIRAMA20',
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '🏹 Rama Navami Special',
+        description: 'Seek Lord Rama\'s blessings for righteous path and family harmony. 20% OFF.',
+        descriptionTe: 'కుటుంబ క్షేమం మరియు ధర్మ సంకల్ప జాతక విశ్లేషణపై 20% రాయితీ.',
+        windows: [['2027-04-08', '2027-04-16']],
+        minAmount: 100
+    },
+    {
+        id: 'gurupurnima',
+        name: 'Guru Purnima Rishi Kripa',
+        nameTe: 'గురు పౌర్ణమి జ్ఞానానుగ్రహ పర్వం',
+        code: 'GURUKRIPA',
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '✨ Guru Purnima Special',
+        description: 'Honour divine knowledge. Get 20% OFF on all Jyotish consultations.',
+        descriptionTe: 'గురుదేవుల ఆశీస్సులతో జ్యోతిష మార్గదర్శకత్వంపై 20% ప్రత్యేక రాయితీ.',
+        windows: [['2027-07-11', '2027-07-19']],
+        minAmount: 100
+    },
+    {
+        id: 'rakhi',
+        name: 'Raksha Bandhan & Shravan Purnima',
+        nameTe: 'రక్షాబంధన్ & శ్రావణ పౌర్ణమి రక్షా బంధం',
+        code: 'RAKSHA20',
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '🧵 Raksha Bandhan Special',
+        description: 'Blessings for sibling welfare and protection. 20% OFF on family charts.',
+        descriptionTe: 'సోదర సౌభాగ్యం మరియు కుటుంబ జాతక విశ్లేషణపై 20% రాయితీ.',
+        windows: [['2027-08-10', '2027-08-18']],
+        minAmount: 100
+    },
+    {
+        id: 'ganesh',
+        name: 'Vinayaka Chavithi Vighna Nivaran',
+        nameTe: 'వినాయక చవితి విఘ్న నివారణ మహోత్సవం',
+        code: 'GANESHA25',
+        discountType: 'percentage',
+        discountValue: 25,
+        badge: '🐘 Ganesha Blessing',
+        description: 'Remove all obstacles from marriage & business. 25% OFF with Ganapati\'s blessings.',
+        descriptionTe: 'సర్వవిఘ్న నివారణార్థం జాతక సంప్రదింపులపై 25% దక్షిణ రాయితీ.',
+        windows: [['2027-08-27', '2027-09-05']],
+        minAmount: 100
+    }
+];
+
+// Special Standing Offers
+export const STANDING_OFFERS = [
+    {
+        code: 'FIRSTASTRO',
+        aliases: ['WELCOME50', 'PRATHAM101', 'NEWUSER'],
+        name: 'Pratham Sankalp (New Customer Blessing)',
+        nameTe: 'ప్రథమ సంకల్పం (నూతన వినియోగదారుల ప్రత్యేక బహుమతి)',
+        badge: '🌸 First Consultation Blessing',
+        discountType: 'dynamic_welcome', // Smartly handles ₹101 service vs ₹701 service
+        discountValue: 101,
+        minAmount: 100,
+        requiresNewUser: true,
+        description: 'Welcoming blessing for your very first consultation with AstroSharma.',
+        descriptionTe: 'మీ ప్రథమ జ్యోతిష సంప్రదింపులపై ప్రత్యేక దక్షిణ రాయితీ.'
+    },
+    {
+        code: 'SHUBH20',
+        aliases: ['FESTIVAL20', 'UTSAV20'],
+        name: 'Shubh Muhurtham Parv Blessing',
+        nameTe: 'శుభ ముహూర్త పర్వదిన ఆశీర్వాదం',
+        badge: '🪔 Auspicious Day Special',
+        discountType: 'percentage',
+        discountValue: 20,
+        minAmount: 100,
+        requiresNewUser: false,
+        description: '20% OFF auspicious muhurtham and horoscope guidance.',
+        descriptionTe: 'సమస్త శుభకార్యాల ముహూర్తాలు మరియు జాతక విశ్లేషణపై 20% రాయితీ.'
+    },
+    {
+        code: 'LOYALTY25',
+        aliases: ['VIPLOYALTY', 'VALUEDCLIENT', 'PARAM25', 'RETURNING'],
+        name: 'Revered Client Loyalty Blessing',
+        nameTe: 'పరమ ఆత్మీయ సాధకుల నిత్య కృపా ఆశీర్వాదం',
+        badge: '👑 Valued Client Loyalty Blessing',
+        discountType: 'percentage',
+        discountValue: 25,
+        minAmount: 100,
+        requiresLoyalUser: true,
+        description: 'Exclusive 25% OFF dakshina blessing in gratitude for your continued faith in AstroSharma.',
+        descriptionTe: 'ఆస్ట్రోశర్మపై మీకున్న నిరంతర విశ్వాసానికి కృతజ్ఞతగా 25% ప్రత్యేక లాయల్టీ రాయితీ.'
+    }
+];
+
+// Offers follow the date in India, on the server and on every visitor's device
+export const getIndiaDateKey = (now) => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit'
+}).format(now);
+
+const getIndiaDayOfWeek = (now) => new Date(`${getIndiaDateKey(now)}T00:00:00Z`).getUTCDay();
+
+const isFestivalInSeason = (festival, now) => {
+    const today = getIndiaDateKey(now);
+    return (festival.windows || []).some(([start, end]) => start <= today && today <= end);
+};
+
+/**
+ * Check if visitor is a first-time customer
+ */
+export const isFirstTimeCustomer = () => {
+    try {
+        if (typeof window === 'undefined') return true;
+        const hasBooked = localStorage.getItem('astro_has_booked');
+        const count = parseInt(localStorage.getItem('astro_booking_count') || '0', 10);
+        return !hasBooked && count === 0;
+    } catch {
+        return true;
+    }
+};
+
+/**
+ * Check if visitor is a valuable returning customer and calculate VIP eligibility
+ * Rules:
+ * 1. At least 2 completed paid orders to qualify for VIP coupon
+ * 2. Gap of at least 1 regular order between VIP coupon uses (alternate orders)
+ */
+export const getCustomerLoyaltyInfo = () => {
+    try {
+        if (typeof window === 'undefined') return { isValuableCustomer: false, isVipEligible: false, bookingCount: 0 };
+        const count = parseInt(localStorage.getItem('astro_booking_count') || '0', 10);
+        const hasBooked = localStorage.getItem('astro_has_booked') === 'true';
+        const effectiveCount = Math.max(count, hasBooked ? 1 : 0);
+        
+        if (effectiveCount > 0) {
+            let tier = 'Silver Seeker';
+            let tierTe = 'రజత శ్రేణి సాధకులు';
+            let perk = 'Priority Astrologer Callback';
+            if (effectiveCount >= 3) {
+                tier = 'Platinum Patron';
+                tierTe = 'పరమ విశిష్ట ఆత్మీయులు';
+                perk = 'VIP Same-Day Callback & Dedicated Remedy Consultation';
+            } else if (effectiveCount >= 2) {
+                tier = 'Gold Seeker';
+                tierTe = 'స్వర్ణ శ్రేణి ఆత్మీయులు';
+                perk = 'VIP Priority Callback within 12h';
+            }
+
+            const minOrdersRequired = 2; // At least 2 completed paid orders to unlock VIP
+            const gapRequired = 1; // Gap of 1 regular order between VIP coupons
+            const lastVipBookingIndex = parseInt(localStorage.getItem('astro_last_vip_booking_index') || '0', 10);
+            const hasMinOrders = effectiveCount >= minOrdersRequired;
+            const ordersSinceLastVip = lastVipBookingIndex > 0 ? (effectiveCount - lastVipBookingIndex) : Infinity;
+            const isVipEligible = hasMinOrders && (ordersSinceLastVip >= gapRequired);
+
+            let ordersUntilNextVip = 0;
+            let vipReason = '';
+            if (!hasMinOrders) {
+                ordersUntilNextVip = minOrdersRequired - effectiveCount;
+                vipReason = `Complete ${ordersUntilNextVip} more consultation to unlock 25% VIP Dakshina blessing (requires 2 completed paid orders).`;
+            } else if (ordersSinceLastVip < gapRequired) {
+                ordersUntilNextVip = gapRequired - ordersSinceLastVip;
+                vipReason = `VIP blessing was applied on your previous booking (#${lastVipBookingIndex}). Complete 1 regular consultation to unlock VIP again (Alternate orders policy).`;
+            } else {
+                ordersUntilNextVip = 0;
+                vipReason = '25% VIP Dakshina Blessing is unlocked and ready to apply!';
+            }
+
+            return {
+                isValuableCustomer: true,
+                isVipEligible,
+                bookingCount: effectiveCount,
+                nextConsultationNumber: effectiveCount + 1,
+                lastVipBookingIndex,
+                ordersSinceLastVip,
+                ordersUntilNextVip,
+                vipReason,
+                tier,
+                tierTe,
+                perk,
+                loyaltyCode: 'LOYALTY25',
+                discountPercent: 25
+            };
+        }
+        return { isValuableCustomer: false, isVipEligible: false, bookingCount: 0 };
+    } catch {
+        return { isValuableCustomer: false, isVipEligible: false, bookingCount: 0 };
+    }
+};
+
+/**
+ * Record customer booking upon successful payment with coupon tracking
+ */
+export const recordCustomerBooking = (phone, email, couponCode = '') => {
+    try {
+        if (typeof window !== 'undefined') {
+            const current = parseInt(localStorage.getItem('astro_booking_count') || '0', 10);
+            const next = current + 1;
+            localStorage.setItem('astro_booking_count', String(next));
+            localStorage.setItem('astro_has_booked', 'true');
+            if (phone) localStorage.setItem('astro_customer_phone', phone);
+            if (email) localStorage.setItem('astro_customer_email', email);
+            localStorage.setItem('astro_last_booked_at', new Date().toISOString());
+
+            // Track if a VIP coupon was applied
+            const cleanCode = String(couponCode || '').trim().toUpperCase();
+            const VIP_CODES = ['LOYALTY25', 'VIPLOYALTY', 'VALUEDCLIENT', 'PARAM25', 'RETURNING', 'VIP', 'LOYALTY'];
+            if (VIP_CODES.includes(cleanCode)) {
+                localStorage.setItem('astro_last_vip_booking_index', String(next));
+                localStorage.setItem('astro_last_vip_coupon_at', new Date().toISOString());
+            }
+        }
+    } catch (e) {
+        console.warn('Could not record customer booking:', e);
+    }
+};
+
+/**
+ * Mark customer as booked after successful payment (legacy alias)
+ */
+export const markCustomerAsBooked = (phone, email, couponCode = '') => {
+    recordCustomerBooking(phone, email, couponCode);
+};
+
+// =========================================================================
+// ON-DEMAND FESTIVAL CAMPAIGN SWITCH
+// =========================================================================
+// Set to null or '' when no festival campaign is active (runs daily authentic Vedic planetary blessings!)
+// When you want to run a festival campaign, simply set its ID here (or set VITE_ACTIVE_FESTIVAL in .env):
+// Options: 'diwali' | 'navratri' | 'sankranti' | 'ugadi' | 'shivratri' | 'karwachauth' | 'kartik_purnima'
+// A campaign is only promoted inside the festival's dates, because its code doesn't work outside them.
+export const ACTIVE_FESTIVAL_ID = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ACTIVE_FESTIVAL) || null;
+
+/**
+ * Authentic Vedic 7-Day Planetary Blessings (Navagraha Calendar)
+ * Each day of the week is governed by an authentic celestial deity.
+ */
+export const PLANETARY_BLESSINGS = {
+    0: { // Sunday - Lord Surya (Sun)
+        id: 'ravivar',
+        name: 'Ravivar Surya Tejas & Arogya Blessing',
+        nameTe: 'ఆదివారం సూర్య తేజస్సు & ఆయురారోగ్య జాతక అనుగ్రహం',
+        code: 'SURYA20',
+        aliases: ['RAVIVAR', 'BHANUVAR', 'ADIVARAM', 'SURYA'],
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '☀️ Sunday Surya Special',
+        description: "Lord Surya's divine grace for health, confidence, government career and vitality. 20% OFF.",
+        descriptionTe: 'ఆరోగ్యం, ఆత్మవిశ్వాసం మరియు ప్రభుత్వ ఉద్యోగ యోగంపై 20% రాయితీ.',
+        minAmount: 100,
+        isFestival: false
+    },
+    1: { // Monday - Lord Shiva & Chandra (Moon)
+        id: 'somvar',
+        name: 'Somvar Shiva Kripa & Manah Shanti Blessing',
+        nameTe: 'సోమవారం శివానుగ్రహం & మానసిక ప్రశాంతత పర్వం',
+        code: 'SHIVOHAM',
+        aliases: ['SOMVAR', 'SHIVAY', 'SOMAVARAM', 'SHIVA'],
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '🕉️ Monday Shiva Special',
+        description: "Mitigate Moon afflictions and receive Lord Shiva's supreme mental peace. 20% OFF.",
+        descriptionTe: 'చంద్ర దోష నివారణ మరియు మానసిక ప్రశాంతత కొరకు 20% విశేష రాయితీ.',
+        minAmount: 100,
+        isFestival: false
+    },
+    2: { // Tuesday - Mangal / Kuja & Hanumanji
+        id: 'mangalvar',
+        name: 'Mangalvar Hanuman Kripa & Kuja Dosha Nivaran',
+        nameTe: 'మంగళవారం హనుమత్ కృప & మంగళ దోష నివారణ',
+        code: 'MANGALVAR',
+        aliases: ['HANUMAN', 'MANGAL', 'MANGALAVARAM', 'KUJA'],
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '🚩 Tuesday Mangal Special',
+        description: "Seek Hanumanji's blessings for Kuja dosha remedies and obstacle removal. 20% OFF today.",
+        descriptionTe: 'కుజ దోష నివారణ మరియు వివాహ యోగం కోసం 20% ప్రత్యేక రాయితీ.',
+        minAmount: 100,
+        isFestival: false
+    },
+    3: { // Wednesday - Budha (Mercury) & Lord Ganesha
+        id: 'budhavar',
+        name: 'Budhavar Ganesha Kripa & Vyapar Vidya Blessing',
+        nameTe: 'బుధవారం గణేశ కృప & వ్యాపార, విద్యా యోగం',
+        code: 'BUDHA20',
+        aliases: ['BUDHAVAR', 'GANESHA', 'BUDHAVARAM', 'BUDHA'],
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '🌿 Wednesday Budha Special',
+        description: 'Mercury blessing for intellect, competitive exams, business trade and finance. 20% OFF.',
+        descriptionTe: 'వ్యాపార వృద్ధి, గణిత, ఉన్నత విద్య మరియు వాణిజ్య యోగంపై 20% రాయితీ.',
+        minAmount: 100,
+        isFestival: false
+    },
+    4: { // Thursday - Brihaspati (Jupiter) & Dakshinamurthy
+        id: 'guruvar',
+        name: 'Brihaspati Guruvar Vidya & Career Blessing',
+        nameTe: 'బృహస్పతి గురువారం విద్యా & ఉన్నత కెరీర్ యోగం',
+        code: 'GURUKRIPA',
+        aliases: ['GURUVAR', 'BRIHASPATI', 'GURUVARAM', 'GURU'],
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '🌟 Thursday Guru Special',
+        description: "Jupiter's divine grace for higher career, wisdom, children and prosperity. 20% OFF.",
+        descriptionTe: 'గురు గ్రహ అనుగ్రహం కొరకు కెరీర్ & ధన యోగ విశ్లేషణపై 20% రాయితీ.',
+        minAmount: 100,
+        isFestival: false
+    },
+    5: { // Friday - Shukra (Venus) & Goddess Mahalakshmi
+        id: 'shukravar',
+        name: 'Shukravar Mahalakshmi Soubhagya & Dhana Blessing',
+        nameTe: 'శుక్రవారం మహాలక్ష్మి సౌభాగ్య & ధన యోగ ఆశీర్వాదం',
+        code: 'LAKSHMI20',
+        aliases: ['SHUKRAVAR', 'LAKSHMI', 'SHUKRAVARAM', 'SHUKRA20', 'MAHALAKSHMI'],
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '🪷 Friday Lakshmi Special',
+        description: "Goddess Mahalakshmi's grace for wealth, marriage compatibility and family joy. 20% OFF.",
+        descriptionTe: 'ధనధాన్య వృద్ధి మరియు దాంపత్య సౌభాగ్య జాతక పరిశీలనపై 20% ప్రత్యేక రాయితీ.',
+        minAmount: 100,
+        isFestival: false
+    },
+    6: { // Saturday - Shani Dev & Lord Venkateswara
+        id: 'shanivar',
+        name: 'Shanivar Shani Shanti & Sade Sati Guidance',
+        nameTe: 'శనివారం శని శాంతి & ఏలినాటి శని నివారణ',
+        code: 'SHUBH20',
+        aliases: ['SHANIVAR', 'SHANI', 'SHANIVARAM'],
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '🪐 Saturday Shani Special',
+        description: 'Mitigate Saturn Sade Sati & Dhaiya difficulties with Vedic remedies. 20% OFF.',
+        descriptionTe: 'శని దోష శాంతి మరియు పరిహారాల కోసం 20% ప్రత్యేక రాయితీ.',
+        minAmount: 100,
+        isFestival: false
+    }
+};
+
+/**
+ * Resolves active promotion:
+ * 1. If an On-Demand festival is activated (ACTIVE_FESTIVAL_ID) and in season, it presents that festival.
+ * 2. Otherwise, effortlessly runs the authentic Vedic Planetary Day blessing for today's day of week!
+ */
+export const getActiveFestivalOffer = (now = new Date(), activeFestivalId = ACTIVE_FESTIVAL_ID) => {
+    // 1. Check if an on-demand festival is explicitly activated
+    if (activeFestivalId) {
+        const found = HINDU_FESTIVALS.find(f =>
+            f.id.toLowerCase() === activeFestivalId.toLowerCase() ||
+            f.code.toUpperCase() === activeFestivalId.toUpperCase()
+        );
+        if (found && isFestivalInSeason(found, now)) {
+            return {
+                ...found,
+                isFestival: true
+            };
+        }
+    }
+
+    // 2. Authentic Vedic 7-Day Planetary Day Blessing (Always relevant & accurate!)
+    const dayOfWeek = getIndiaDayOfWeek(now); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+    const planetaryBlessing = PLANETARY_BLESSINGS[dayOfWeek];
+
+    if (planetaryBlessing) {
+        return {
+            ...planetaryBlessing,
+            isFestival: false
+        };
+    }
+
+    // 3. Fallback: Auspicious Shubh Muhurtham Parv
+    return {
+        id: 'shubh_parv',
+        name: 'Shubh Muhurtham Vedic Blessing',
+        nameTe: 'శుభ ముహూర్త వేద ఆశీర్వాదం',
+        code: 'SHUBH20',
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: '🪔 Shubh Parv Offer',
+        description: 'Auspicious celestial planetary alignments. Get 20% OFF on all consultations.',
+        descriptionTe: 'గ్రహాల శుభ సంచార వేళ సమస్త జాతక విశ్లేషణలపై 20% ప్రత్యేక రాయితీ.',
+        minAmount: 100,
+        isFestival: false
+    };
+};
+
+/**
+ * Calculates discount based on amount, coupon details, and user status
+ */
+export const calculateDiscountAmount = (offer, amount) => {
+    if (!offer || !amount) return 0;
+
+    if (offer.discountType === 'dynamic_welcome') {
+        // If it's a ₹101 consultation (Prashna Kundali), provide a ₹50 discount so the user pays ₹51 Shubh Shagun dakshina
+        if (amount <= 150) {
+            return 50; // User pays ₹51
+        }
+        // For higher packages (₹201, ₹301, ₹701), provide full ₹101 welcome blessing!
+        return 101;
+    }
+
+    if (offer.discountType === 'percentage') {
+        return Math.round((amount * offer.discountValue) / 100);
+    }
+
+    if (offer.discountType === 'flat') {
+        return offer.discountValue;
+    }
+
+    return 0;
+};
+
+// The discount actually given: never takes the price below the sacred minimum dakshina of ₹21
+export const getPayableDiscount = (offer, amount) => {
+    const discountAmount = calculateDiscountAmount(offer, amount);
+    return amount - discountAmount < 21 ? Math.max(0, amount - 21) : discountAmount;
+};
+
+const matchesCode = (offer, cleanCode) => offer.code === cleanCode || Boolean(offer.aliases?.includes(cleanCode));
+
+/**
+ * True for any code this file owns, in season or not. Everything else may be a coupon created in AstroAdmin.
+ * AstroAdmin refuses these codes too (RESERVED_CODES in its couponController), so update both together.
+ */
+export const isBuiltInCouponCode = (code) => {
+    const cleanCode = String(code || '').trim().toUpperCase();
+    return ['WELCOME', 'FIRST', 'LOYALTY', 'VIP'].includes(cleanCode)
+        || [...STANDING_OFFERS, ...Object.values(PLANETARY_BLESSINGS), ...HINDU_FESTIVALS].some(o => matchesCode(o, cleanCode));
+};
+
+/**
+ * Validates a coupon code against an order amount and user status
+ */
+export const validateCoupon = (code, baseAmount, isNewUser = false, isLoyalUser = false, loyaltyInfo = null, now = new Date()) => {
+    if (!code || typeof code !== 'string') {
+        return { valid: false, message: 'Please enter a promo code.' };
+    }
+
+    const cleanCode = code.trim().toUpperCase();
+    const amount = Number(baseAmount) || 0;
+
+    // 1. Check standing offers (FIRSTASTRO, SHUBH20, LOYALTY25)
+    let matchedOffer = STANDING_OFFERS.find(o => matchesCode(o, cleanCode));
+
+    // 2. Check annual Hindu festivals in season (DIWALI30, NAVRATRI25, UGADI25, etc.)
+    // These come before the weekday blessings because some share a code, like SHIVOHAM
+    if (!matchedOffer) {
+        matchedOffer = HINDU_FESTIVALS.find(f => f.code === cleanCode && isFestivalInSeason(f, now));
+    }
+
+    // 3. Check today's planetary day blessing (LAKSHMI20, MANGALVAR, GURUKRIPA, etc.)
+    if (!matchedOffer) {
+        const todaysBlessing = PLANETARY_BLESSINGS[getIndiaDayOfWeek(now)];
+        matchedOffer = matchesCode(todaysBlessing, cleanCode) ? todaysBlessing : undefined;
+    }
+
+    // Fallbacks
+    if (!matchedOffer) {
+        if (cleanCode === 'WELCOME' || cleanCode === 'FIRST') {
+            matchedOffer = STANDING_OFFERS.find(o => o.code === 'FIRSTASTRO');
+        } else if (cleanCode === 'LOYALTY' || cleanCode === 'VIP') {
+            matchedOffer = STANDING_OFFERS.find(o => o.code === 'LOYALTY25');
+        }
+    }
+
+    if (!matchedOffer) {
+        return {
+            valid: false,
+            message: `Coupon code '${cleanCode}' is invalid or not active today.`
+        };
+    }
+
+    // Check new user constraint
+    if (matchedOffer.requiresNewUser && !isNewUser) {
+        return {
+            valid: false,
+            message: 'This welcome blessing is reserved exclusively for first-time seekers.'
+        };
+    }
+
+    // Check loyal user constraint & VIP criteria (Min 2 completed orders + 1 order gap)
+    if (matchedOffer.requiresLoyalUser) {
+        if (!isLoyalUser) {
+            return {
+                valid: false,
+                message: 'This VIP loyalty blessing is reserved exclusively for our valued returning clients.'
+            };
+        }
+
+        const info = loyaltyInfo || getCustomerLoyaltyInfo();
+        const bookingCount = info?.bookingCount || 0;
+        const isEligible = info?.isVipEligible !== undefined ? info.isVipEligible : (bookingCount >= 2);
+
+        if (!isEligible) {
+            if (bookingCount < 2) {
+                return {
+                    valid: false,
+                    message: `VIP 25% discount requires at least 2 completed consultations. You have completed ${bookingCount}. Complete this consultation to become eligible next time!`
+                };
+            }
+            if (info?.ordersUntilNextVip > 0 || info?.ordersSinceLastVip < 1) {
+                return {
+                    valid: false,
+                    message: 'VIP discount was used on your previous consultation. A gap of at least 1 regular consultation is required between VIP discounts (Alternate orders policy).'
+                };
+            }
+            return {
+                valid: false,
+                message: 'This VIP loyalty blessing is currently on cooldown. Please complete 1 regular consultation to unlock it.'
+            };
+        }
+    }
+
+    // Check minimum amount
+    if (matchedOffer.minAmount && amount < matchedOffer.minAmount) {
+        return {
+            valid: false,
+            message: `Minimum order amount of ₹${matchedOffer.minAmount} required for this coupon.`
+        };
+    }
+
+    // Calculate discount
+    const discountAmount = getPayableDiscount(matchedOffer, amount);
+    const finalAmount = Math.max(21, amount - discountAmount);
+
+    return {
+        valid: true,
+        code: cleanCode,
+        offerName: matchedOffer.name,
+        offerNameTe: matchedOffer.nameTe,
+        badge: matchedOffer.badge,
+        discountAmount,
+        finalAmount,
+        originalAmount: amount,
+        message: `✨ ${matchedOffer.badge} applied! You save ₹${discountAmount}.`
+    };
+};
+
+/**
+ * Returns tailored, ready-to-display offer recommendations for the current service and visitor
+ */
+export const getCuratedOffers = (baseAmount, isNewUser, isLoyalUser = false, loyaltyInfo = null, festival = getActiveFestivalOffer()) => {
+    const offers = [];
+    const amount = Number(baseAmount) || 0;
+
+    // 1. VIP / Revered Loyal Customer Offer (Requires eligibility: min 2 orders + gap satisfied)
+    const isVipEligible = loyaltyInfo ? Boolean(loyaltyInfo.isVipEligible) : (isLoyalUser && (loyaltyInfo?.bookingCount >= 2));
+    if (isLoyalUser && isVipEligible) {
+        const loyalDiscount = Math.round((amount * 25) / 100);
+        offers.push({
+            code: 'LOYALTY25',
+            badge: '👑 Valued Client Loyalty Blessing',
+            title: 'Valued Client Blessing',
+            tag: '25% VIP',
+            savings: `Save ₹${loyalDiscount} (${loyaltyInfo?.tier || 'Platinum Patron'})`,
+            isSpecial: true,
+            theme: 'gold'
+        });
+    }
+
+    // 2. Welcome Offer for New User (Only for first-time seekers)
+    if (isNewUser && !isLoyalUser) {
+        const welcomeDiscount = amount <= 150 ? 50 : 101;
+        const finalPay = amount - welcomeDiscount;
+        offers.push({
+            code: 'FIRSTASTRO',
+            badge: '🌸 First Consultation Blessing',
+            title: 'First-time Welcome Blessing',
+            tag: amount <= 150 ? `Pay ₹${finalPay}` : `₹101 OFF`,
+            savings: `Save ₹${welcomeDiscount}`,
+            isSpecial: true,
+            theme: 'pink'
+        });
+    }
+
+    // 3. Active Festival / Auspicious Day Offer (e.g. DIWALI30 or planetary blessing)
+    if (festival) {
+        const festDiscount = getPayableDiscount(festival, amount);
+        offers.push({
+            code: festival.code,
+            badge: festival.badge,
+            title: festival.name,
+            tag: festival.discountType === 'flat' ? `₹${festival.discountValue} OFF` : `${festival.discountValue}% OFF`,
+            savings: `Save ₹${festDiscount}`,
+            isSpecial: false,
+            theme: 'diwali'
+        });
+    }
+
+    // 4. Shubh Muhurtham General Offer
+    if (!offers.some(o => o.code === 'SHUBH20')) {
+        const shubhDiscount = Math.round((amount * 20) / 100);
+        offers.push({
+            code: 'SHUBH20',
+            badge: '🪔 Shubh Parv Offer',
+            title: 'Shubh Muhurtham Parv',
+            tag: '20% OFF',
+            savings: `Save ₹${shubhDiscount}`,
+            isSpecial: false,
+            theme: 'orange'
+        });
+    }
+
+    // Deduplicate by code
+    const seen = new Set();
+    return offers.filter(o => {
+        if (seen.has(o.code)) return false;
+        seen.add(o.code);
+        return true;
+    });
+};

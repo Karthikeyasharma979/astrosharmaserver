@@ -44,4 +44,23 @@ React runs in the browser (client-side) and cannot securely communicate with SMT
 -   **Body**: FormData (fullName, dob, phone, email, etc.)
 -   **Files**: `screenshot` (Payment proof)
 -   **Action**: Sends two emails (one to Admin with attachment, one to User).
-# astrosharmaserver
+
+### GET `/api/reviews`
+-   **Description**: Retrieves the latest approved client reviews from MongoDB.
+
+### POST `/api/reviews`
+-   **Body**: JSON (`name`, `location`, `category`, `service`, `rating`, `comment`)
+-   **Action**: Validates with Joi and saves the review into MongoDB.
+
+### POST `/api/reviews/:id/like`
+-   **Action**: Increments the helpful like count for a review.
+
+### GET `/api/track/:transactionId`
+-   **Description**: Checks consultation status by Razorpay payment ID.
+
+### GET `/api/panchang`
+-   **Query Params**: `date` (YYYY-MM-DD), `city` (e.g. `hyderabad`, `dallas`), or custom `lat`, `lon`, `tz`.
+-   **Description**: Computes real-time astronomical Vedic Panchanga (Tithi, Nakshatra, Yoga, Karana, Sunrise, Sunset, Rahu Kalam, Yamagandam, Gulika Kalam, Durmuhurta) for any city and any date.
+
+### GET `/api/panchang/cities`
+-   **Description**: Returns list of preset Indian and International cities supported by the Panchang calculator.

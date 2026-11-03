@@ -1,0 +1,284 @@
+/**
+ * Krishnamurti Paddhati (KP) Ruling Planets Engine
+ *
+ * Computes Ruling Planets (RP) strictly at the specific time and geographic place
+ * of judgment / query (Prashna / Horary), NEVER from birth data.
+ *
+ * Core KP Ruling Planets:
+ * 1. Day Lord (Vara Adhipati)
+ * 2. Ascendant Sign Lord (Lagna Rasi Lord)
+ * 3. Ascendant Star Lord (Lagna Nakshatra Lord)
+ * 4. Moon Sign Lord (Chandra Rasi Lord)
+ * 5. Moon Star Lord (Chandra Nakshatra Lord)
+ * Optional refinements:
+ * - Ascendant Sub Lord & Moon Sub Lord
+ * - Node Representatives (Rahu / Ketu representing conjunct/sign lords)
+ */
+
+import * as Astronomy from 'astronomy-engine';
+import { resolveKPLongitude } from './kpSubLord.js';
+import { calculateKPHouses } from './kpHouses.js';
+import { getKPAyanamsha, KP_AYANAMSHA_MODES } from './kpAyanamsha.js';
+import { resolveLocalToUTC } from '../../services/locationService.js';
+
+export const DAY_LORDS = [
+    { dayIndex: 0, dayName: 'Sunday', planet: 'Sun', te: 'ఆదివారం (సూర్యుడు)' },
+    { dayIndex: 1, dayName: 'Monday', planet: 'Moon', te: 'సోమవారం (చంద్రుడు)' },
+    { dayIndex: 2, dayName: 'Tuesday', planet: 'Mars', te: 'మంగళవారం (కుజుడు)' },
+    { dayIndex: 3, dayName: 'Wednesday', planet: 'Mercury', te: 'బుధవారం (బుధుడు)' },
+    { dayIndex: 4, dayName: 'Thursday', planet: 'Jupiter', te: 'గురువారం (గురువు)' },
+    { dayIndex: 5, dayName: 'Friday', planet: 'Venus', te: 'శుక్రవారం (శుక్రుడు)' },
+    { dayIndex: 6, dayName: 'Saturday', planet: 'Saturn', te: 'శనివారం (శని)' }
+];
+
+export const HORA_CHALDEAN_ORDER = ['Sun', 'Venus', 'Mercury', 'Moon', 'Saturn', 'Jupiter', 'Mars'];
+
+export const DAY_LORD_CHALDEAN_INDEX = {
+    Sun: 0,
+    Venus: 1,
+    Mercury: 2,
+    Moon: 3,
+    Saturn: 4,
+    Jupiter: 5,
+    Mars: 6
+};
+
+/**
+ * Calculates the astronomical planetary hour (Hora) and Hora Lord for any date, time, and location
+ *
+ * @param {Object} params
+ * @param {string} params.date - 'YYYY-MM-DD'
+ * @param {string} params.time - 'HH:MM' or 'HH:MM:SS'
+ * @param {number} [params.lat=17.3850] - Latitude
+ * @param {number} [params.lon=78.4867] - Longitude
+ * @param {string} [params.timezone='Asia/Kolkata'] - IANA Timezone
+ * @returns {Object} { horaPlanet, horaPlanetTe, horaIndex, dayLord, sunrise, sunset, horaNameEn, horaNameTe }
+ */
+export function calculateKPHora({
+    date,
+    time,
+    lat = 17.3850,
+    lon = 78.4867,
+    timezone = 'Asia/Kolkata'
+}) {
+    if (!date || !time) return null;
+
+    const DAY_LORDS_MAP = ['Sun', 'Moon', 'Mars', 'Mercury', 'Jupiter', 'Venus', 'Saturn'];
+    const TELUGU_PLANET_NAMES = {
+        Sun: 'సూర్యుడు',
+        Moon: 'చంద్రుడు',
+        Mars: 'కుజుడు',
+        Mercury: 'బుధుడు',
+        Jupiter: 'గురుడు',
+        Venus: 'శుక్రుడు',
+        Saturn: 'శని',
+        Rahu: 'రాహువు',
+        Ketu: 'కేతువు'
+    };
+
+    const utcDate = resolveLocalToUTC(date, time, timezone);
+    const obs = new Astronomy.Observer(lat, lon, 0);
+
+    // Weekday of an instant as seen at the birth/judgment location
+    const weekdayAt = (instant) => {
+        try {
+            const wd = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short' }).format(instant);
+            const idx = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(wd);
+            if (idx >= 0) return idx;
+        } catch { /* fall through to UTC */ }
+        return instant.getUTCDay();
+    };
+
+    // Search from local midnight so the sunrise found belongs to this local calendar date
+    const searchStart = resolveLocalToUTC(date, '00:00', timezone);
+
+    const sunrise = Astronomy.SearchRiseSet(Astronomy.Body.Sun, obs, +1, searchStart, 1);
+    if (!sunrise) return null;
+    const sunset = Astronomy.SearchRiseSet(Astronomy.Body.Sun, obs, -1, sunrise.date, 1);
+    if (!sunset) return null;
+
+    let dayLordPlanet;
+    let horaIndex;
+
+    const t = utcDate.getTime();
+    if (t < sunrise.date.getTime()) {
+        const prevSearch = new Date(searchStart.getTime() - 24 * 3600 * 1000);
+        const prevSunrise = Astronomy.SearchRiseSet(Astronomy.Body.Sun, obs, +1, prevSearch, 1);
+        const prevSunset = prevSunrise ? Astronomy.SearchRiseSet(Astronomy.Body.Sun, obs, -1, prevSunrise.date, 1) : null;
+
+        if (prevSunrise && prevSunset) {
+            dayLordPlanet = DAY_LORDS_MAP[weekdayAt(prevSunrise.date)];
+
+            const nightDuration = sunrise.date.getTime() - prevSunset.date.getTime();
+            const nightHoraDuration = nightDuration / 12;
+            const elapsed = Math.max(0, t - prevSunset.date.getTime());
+            const slot = Math.min(11, Math.max(0, Math.floor(elapsed / nightHoraDuration)));
+            horaIndex = 12 + slot;
+        } else {
+            dayLordPlanet = 'Sun';
+            horaIndex = 0;
+        }
+    } else if (t < sunset.date.getTime()) {
+        dayLordPlanet = DAY_LORDS_MAP[weekdayAt(sunrise.date)];
+
+        const dayDuration = sunset.date.getTime() - sunrise.date.getTime();
+        const dayHoraDuration = dayDuration / 12;
+        const elapsed = Math.max(0, t - sunrise.date.getTime());
+        horaIndex = Math.min(11, Math.max(0, Math.floor(elapsed / dayHoraDuration)));
+    } else {
+        const nextSunrise = Astronomy.SearchRiseSet(Astronomy.Body.Sun, obs, +1, sunset.date, 1);
+        dayLordPlanet = DAY_LORDS_MAP[weekdayAt(sunrise.date)];
+
+        if (nextSunrise) {
+            const nightDuration = nextSunrise.date.getTime() - sunset.date.getTime();
+            const nightHoraDuration = nightDuration / 12;
+            const elapsed = Math.max(0, t - sunset.date.getTime());
+            const slot = Math.min(11, Math.max(0, Math.floor(elapsed / nightHoraDuration)));
+            horaIndex = 12 + slot;
+        } else {
+            horaIndex = 12;
+        }
+    }
+
+    const startIndex = DAY_LORD_CHALDEAN_INDEX[dayLordPlanet] ?? 0;
+    const horaPlanet = HORA_CHALDEAN_ORDER[(startIndex + horaIndex) % 7];
+
+    return {
+        dayLord: dayLordPlanet,
+        dayLordTe: TELUGU_PLANET_NAMES[dayLordPlanet] || dayLordPlanet,
+        horaIndex: horaIndex + 1,
+        horaPlanet,
+        horaPlanetTe: TELUGU_PLANET_NAMES[horaPlanet] || horaPlanet,
+        horaNameEn: `${horaPlanet} Hora (${horaIndex + 1})`,
+        horaNameTe: `${TELUGU_PLANET_NAMES[horaPlanet] || horaPlanet} హోర (${horaIndex + 1})`
+    };
+}
+
+/**
+ * Calculates KP Ruling Planets for a specific judgment instant and place
+ *
+ * @param {Object} params
+ * @param {string} params.date - 'YYYY-MM-DD'
+ * @param {string} params.time - 'HH:MM'
+ * @param {number} params.lat - Geographic latitude
+ * @param {number} params.lon - Geographic longitude
+ * @param {string} params.timezone - IANA timezone (e.g. 'Asia/Kolkata')
+ * @param {string} params.ayanamshaMode - KP_NEW | KP_ORIGINAL
+ * @returns {Object} Complete Ruling Planets hierarchy
+ */
+export function calculateKPRulingPlanets({
+    date,
+    time,
+    lat,
+    lon,
+    timezone = 'Asia/Kolkata',
+    ayanamshaMode = KP_AYANAMSHA_MODES.KP_NEW
+}) {
+    if (!date || !time || lat === undefined || lon === undefined) {
+        return null;
+    }
+
+    const utcDate = resolveLocalToUTC(date, time, timezone);
+    const astroTime = Astronomy.MakeTime(utcDate);
+    const ayanamsha = getKPAyanamsha(astroTime, ayanamshaMode);
+
+    // 1. Day Lord
+    // Local date components in timezone
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        weekday: 'short'
+    });
+    const weekdayStr = formatter.format(utcDate);
+    const dayMap = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+    const dayIndex = dayMap[weekdayStr] !== undefined ? dayMap[weekdayStr] : utcDate.getUTCDay();
+    const dayLordInfo = DAY_LORDS[dayIndex];
+
+    // 2. Ascendant at Judgment Instant
+    const housesResult = calculateKPHouses({ utcDate, lat, lon, ayanamshaMode });
+    const lagnaCusp = housesResult.ascendant;
+
+    // 3. Moon Position at Judgment Instant
+    const moonVector = Astronomy.GeoVector(Astronomy.Body.Moon, astroTime, true);
+    const moonEc = Astronomy.Ecliptic(moonVector);
+    const moonSidereal = ((moonEc.elon - ayanamsha + 360.0) % 360.0);
+    const moonResolved = resolveKPLongitude(moonSidereal);
+
+    // 4. Rahu & Ketu Positions (Mean Nodes)
+    const t = astroTime.tt / 36525.0;
+    const meanNodeSayana = (125.04452 - 1934.136261 * t + 0.0020708 * t * t + 3600000) % 360;
+    const rahuSidereal = (meanNodeSayana - ayanamsha + 360.0) % 360.0;
+    const ketuSidereal = (rahuSidereal + 180.0) % 360.0;
+
+    const rahuResolved = resolveKPLongitude(rahuSidereal);
+    const ketuResolved = resolveKPLongitude(ketuSidereal);
+
+    // Node representation: Rahu/Ketu represent their Sign Lord and Star Lord
+    const nodeAgents = [
+        {
+            node: 'Rahu',
+            signLord: rahuResolved.signLord,
+            starLord: rahuResolved.starLord,
+            represents: [rahuResolved.signLord, rahuResolved.starLord]
+        },
+        {
+            node: 'Ketu',
+            signLord: ketuResolved.signLord,
+            starLord: ketuResolved.starLord,
+            represents: [ketuResolved.signLord, ketuResolved.starLord]
+        }
+    ];
+
+    // Standard 5 Core Ruling Planets in Classical Strength Order:
+    // 1. Ascendant Star Lord (Strongest immediate trigger)
+    // 2. Ascendant Sign Lord
+    // 3. Moon Star Lord
+    // 4. Moon Sign Lord
+    // 5. Day Lord
+    const corePlanets = [
+        { role: 'Ascendant Star Lord', planet: lagnaCusp.starLord, strength: 1 },
+        { role: 'Ascendant Sign Lord', planet: lagnaCusp.signLord, strength: 2 },
+        { role: 'Moon Star Lord', planet: moonResolved.starLord, strength: 3 },
+        { role: 'Moon Sign Lord', planet: moonResolved.signLord, strength: 4 },
+        { role: 'Day Lord', planet: dayLordInfo.planet, strength: 5 }
+    ];
+
+    // Include sub lords for precision queries
+    const extendedPlanets = [
+        ...corePlanets,
+        { role: 'Ascendant Sub Lord', planet: lagnaCusp.subLord, strength: 6 },
+        { role: 'Moon Sub Lord', planet: moonResolved.subLord, strength: 7 }
+    ];
+
+    const uniqueRulingPlanets = Array.from(new Set(corePlanets.map(p => p.planet)));
+
+    return {
+        judgmentTime: {
+            localDate: date,
+            localTime: time,
+            timezone,
+            utcIso: utcDate.toISOString(),
+            latitude: lat,
+            longitude: lon
+        },
+        dayLord: dayLordInfo,
+        horaLord: calculateKPHora({ date, time, lat, lon, timezone }),
+        lagna: {
+            longitude: lagnaCusp.siderealLongitude,
+            sign: lagnaCusp.sign,
+            signLord: lagnaCusp.signLord,
+            starLord: lagnaCusp.starLord,
+            subLord: lagnaCusp.subLord
+        },
+        moon: {
+            longitude: moonSidereal,
+            sign: moonResolved.sign,
+            signLord: moonResolved.signLord,
+            starLord: moonResolved.starLord,
+            subLord: moonResolved.subLord
+        },
+        coreRulingPlanets: corePlanets,
+        extendedRulingPlanets: extendedPlanets,
+        uniqueRulingPlanets,
+        nodeAgents
+    };
+}

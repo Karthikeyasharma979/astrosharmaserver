@@ -1,0 +1,127 @@
+/**
+ * Single source of truth for consultation prices and coupon quotes.
+ * Shared by the Consultation page (display) and the server (amount actually charged),
+ * so the browser can never decide what a booking costs.
+ *
+ * The server repository keeps a copy of this file and festivalOffers.js in its shared/ folder.
+ * After changing either one, run "npm run sync-shared" in server/ and deploy both together.
+ */
+import { getIndiaDateKey, getPayableDiscount, isBuiltInCouponCode, validateCoupon } from './festivalOffers.js';
+
+export { isBuiltInCouponCode };
+
+// Base dakshina in rupees, keyed by consultation type id
+export const CONSULTATION_PRICES = {
+    kundali: 101,
+    match: 201,
+    deep: 701,
+    marriageMuhurtham: 301,
+    muhurtham: 301
+};
+
+export const formatRupees = (amount) => `₹${amount}`;
+
+/**
+ * Computes the payable amount for a consultation.
+ *
+ * @param {Object} params
+ * @param {string} params.consultationTypeId - key of CONSULTATION_PRICES
+ * @param {string} [params.couponCode]
+ * @param {boolean} [params.isNewUser] - no previous bookings for this customer
+ * @param {Object|null} [params.loyaltyInfo] - shape returned by /api/customer-loyalty
+ * @returns {{ valid: boolean, message?: string, baseAmount?: number, discountAmount?: number, finalAmount?: number, couponCode?: string }}
+ */
+export function quoteConsultation({ consultationTypeId, couponCode = '', isNewUser = false, loyaltyInfo = null }) {
+    const baseAmount = CONSULTATION_PRICES[consultationTypeId];
+    if (!baseAmount) {
+        return { valid: false, message: 'Unknown consultation type.' };
+    }
+
+    const code = String(couponCode || '').trim();
+    if (!code) {
+        return { valid: true, baseAmount, discountAmount: 0, finalAmount: baseAmount, couponCode: '' };
+    }
+
+    const isLoyalUser = Boolean(loyaltyInfo?.isValuableCustomer);
+    // Always pass an object so validateCoupon never falls back to browser localStorage
+    const coupon = validateCoupon(code, baseAmount, isNewUser, isLoyalUser, loyaltyInfo || { bookingCount: 0, isVipEligible: false });
+    if (!coupon.valid) {
+        return { valid: false, message: coupon.message, baseAmount };
+    }
+
+    return {
+        valid: true,
+        baseAmount,
+        discountAmount: coupon.discountAmount,
+        finalAmount: coupon.finalAmount,
+        couponCode: coupon.code,
+        offerName: coupon.offerName
+    };
+}
+
+/**
+ * Computes the payable amount using a coupon created in AstroAdmin.
+ *
+ * @param {Object} params
+ * @param {string} params.consultationTypeId - key of CONSULTATION_PRICES
+ * @param {string} params.couponCode - as the customer entered it, used in the "not found" message
+ * @param {Object|null} params.coupon - the saved coupon, or null if there is none with this code
+ * @param {number} [params.totalUses] - bookings made with this coupon by anyone
+ * @param {number} [params.customerUses] - bookings made with this coupon by this customer
+ * @param {boolean} [params.hasCustomerDetails] - whether a usable phone number or email was given
+ * @param {boolean} [params.isNewUser] - no previous bookings for this customer
+ * @param {Date} [params.now]
+ * @returns {{ valid: boolean, message?: string, baseAmount?: number, discountAmount?: number, finalAmount?: number, couponCode?: string, offerName?: string }}
+ */
+export function quoteAdminCoupon({
+    consultationTypeId,
+    couponCode,
+    coupon,
+    totalUses = 0,
+    customerUses = 0,
+    hasCustomerDetails = false,
+    isNewUser = false,
+    now = new Date()
+}) {
+    const baseAmount = CONSULTATION_PRICES[consultationTypeId];
+    if (!baseAmount) {
+        return { valid: false, message: 'Unknown consultation type.' };
+    }
+
+    const today = getIndiaDateKey(now);
+    const inDates = coupon
+        && (!coupon.startDate || coupon.startDate <= today)
+        && (!coupon.endDate || today <= coupon.endDate);
+    if (!coupon || !coupon.isActive || !inDates) {
+        const cleanCode = String(couponCode || '').trim().toUpperCase();
+        return { valid: false, message: `Coupon code '${cleanCode}' is invalid or not active today.`, baseAmount };
+    }
+
+    const reject = (message) => ({ valid: false, message, baseAmount });
+
+    if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && totalUses >= coupon.usageLimit) {
+        return reject('This coupon has reached its usage limit.');
+    }
+    if ((coupon.oneUsePerCustomer || coupon.newCustomersOnly) && !hasCustomerDetails) {
+        return reject('Please enter your phone number or email to use this coupon.');
+    }
+    if (coupon.newCustomersOnly && !isNewUser) {
+        return reject('This coupon is only for first-time customers.');
+    }
+    if (coupon.oneUsePerCustomer && customerUses > 0) {
+        return reject('You have already used this coupon.');
+    }
+    if (coupon.minAmount && baseAmount < coupon.minAmount) {
+        return reject(`Minimum order amount of ₹${coupon.minAmount} required for this coupon.`);
+    }
+
+    const discountAmount = getPayableDiscount(coupon, baseAmount);
+    return {
+        valid: true,
+        baseAmount,
+        discountAmount,
+        finalAmount: baseAmount - discountAmount,
+        couponCode: coupon.code,
+        offerName: coupon.name || 'Special Coupon'
+    };
+}
